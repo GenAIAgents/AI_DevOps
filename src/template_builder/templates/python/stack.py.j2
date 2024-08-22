@@ -1,0 +1,74 @@
+from types import SimpleNamespace
+
+from aws_cdk import (
+    core,
+{% if s3_buckets %}
+    aws_s3 as s3,
+{% endif %}
+{% if ec2_instances %}
+    aws_ec2 as ec2,
+{% endif %}
+{% if lambda_functions %}
+    aws_lambda as _lambda
+{% endif %}
+)
+
+
+class {{ stack_name }}(core.Stack):
+
+    def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
+        super().__init__(scope, id, **kwargs)
+
+        {% if s3_buckets %}
+        self.buckets = self.create_s3_buckets()
+        {% endif %}
+        {% if ec2_instances %}
+        self.ec2_instances = self.create_ec2_instances()
+        {% endif %}
+        {% if lambda_functions %}
+        self.lambda_functions = self.create_lambda_functions()
+        {% endif %}
+
+    {% if s3_buckets %}
+    def create_s3_buckets(self):
+        components = SimpleNamespace()
+        {% for bucket in s3_buckets %}
+        components.{{ bucket.args['name'] }} = s3.Bucket(self, "{{ bucket.args['name'] }}",
+            versioned={{ bucket.args['versioned'] }},
+            removal_policy=core.RemovalPolicy.{{ bucket.args['removal_policy'] or 'DESTROY'}},
+        )
+        {% endfor %}
+
+        return components
+    {% endif %}
+
+    {% if ec2_instances %}
+    def create_ec2_instances(self):
+        components = SimpleNamespace()
+
+        {% for instance in ec2_instances %}
+        vpc{{ loop.index }} = ec2.Vpc(self, "{{ instance.args['vpc_name'] }}")
+        components.{{ instance.args['name'] }} = ec2.Instance(self, "{{ instance.args['name'] }}",
+            instance_type=ec2.InstanceType("{{ instance.args['instance_type'] }}"),
+            machine_image=ec2.MachineImage.latest_amazon_linux(),
+            vpc=vpc{{ loop.index }}
+        )
+        {% endfor %}
+
+        return components
+    {% endif %}
+
+    {% if lambda_functions %}
+    def create_lambda_functions(self):
+        components = SimpleNamespace()
+
+        {% for function in lambda_functions %}
+        components.{{ function.args['name'] }} = _lambda.Function(self, "{{ function.args['name'] }}",
+            runtime=_lambda.Runtime.{{ function.args['runtime'] }},
+            handler="{{ function.args['handler'] }}",
+            code=_lambda.Code.from_asset("{{ function.args['code_asset'] }}")
+        )
+        {% endfor %}
+
+        return components
+    {% endif %}
